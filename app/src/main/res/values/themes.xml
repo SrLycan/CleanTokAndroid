@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Solo para el arranque; la UI usa CleanTokTema (Compose). -->
+    <style name="Tema.CleanTok" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/fondo</item>
+        <item name="android:colorAccent">@color/marca</item>
+    </style>
+    <color name="fondo">#F3F6FA</color>
+</resources>

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Archivos temporales compartidos con otras apps: fotos (cámara) y hojas de QR (compartir/imprimir). -->
+<paths>
+    <cache-path name="fotos" path="fotos/" />
+    <cache-path name="hojas" path="hojas/" />
+</paths>

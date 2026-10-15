@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Tema.CleanTok" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/fondo</item>
+        <item name="android:colorAccent">#8CBCF0</item>
+    </style>
+    <color name="fondo">#0F1722</color>
+</resources>

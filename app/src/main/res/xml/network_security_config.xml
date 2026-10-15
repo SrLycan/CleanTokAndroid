@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Solo para la demo: permite HTTP sin TLS hacia la API en la red local (10.0.2.2 en el emulador o la IP de la PC). -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
