@@ -94,17 +94,18 @@ import org.json.JSONObject
 
 /** Usuarios de la demo: email y quién es (un ejemplo de cada rol de la cadena). */
 private val usuariosDemo = listOf(
+    "superadmin.demo@cleantok.ec" to "Super administrador del sistema · clave SuperAdmin2026!",
     "admin@brillototal.ec" to "Administración · Brillo Total",
-    "supervisor@brillototal.ec" to "Supervisora de establecimiento · solo Hospital San Andrés",
-    "contrato@brillototal.ec" to "Administradora de contrato · consumo por piso",
+    "supervisor@brillototal.ec" to "Supervisora de establecimiento · Brillo Total (solo Hospital San Andrés)",
+    "contrato@brillototal.ec" to "Administradora de contrato · Brillo Total (Hospital y Torre Azul)",
     "maria@brillototal.ec" to "Encargada · Brillo Total",
     "luis@brillototal.ec" to "Encargado · Brillo Total",
+    "admin@andina.ec" to "Administración · Limpieza Andina",
+    "supervisor@andina.ec" to "Supervisor de establecimiento · Limpieza Andina (solo Planta Textil)",
+    "contrato@andina.ec" to "Administrador de contrato · Limpieza Andina (Oficinas y Planta Textil)",
     "ventas@lahigiene.ec" to "Proveedor · Distribuidora La Higiene",
     "reparto@lahigiene.ec" to "Repartidor · Distribuidora La Higiene",
     "ventas@proclean.ec" to "Proveedor · ProClean Ecuador",
-    "admin@andina.ec" to "Administración · Limpieza Andina",
-    "supervisor@andina.ec" to "Supervisor de establecimiento · solo Planta Textil",
-    "superadmin.demo@cleantok.ec" to "Administración del sistema · clave SuperAdmin2026!",
 )
 
 @Composable
@@ -176,7 +177,7 @@ fun PantallaLogin(sesion: Sesion, api: Api, alEntrar: () -> Unit) {
 
             Tarjeta(Modifier.entrada(3)) {
                 Text("Usuarios de la demo", style = MaterialTheme.typography.titleSmall)
-                Text("Toca uno para usarlo · clave Demo2026!", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Toca uno para usarlo · clave Demo2026! (el super admin: SuperAdmin2026!)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 usuariosDemo.forEach { (u, empresa) ->
                     val elegido = u == email.trim()
                     Surface(

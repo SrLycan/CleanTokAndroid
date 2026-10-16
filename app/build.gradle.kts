@@ -20,8 +20,8 @@ android {
         applicationId = "ec.cleantok.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.3-demo"
+        versionCode = 4
+        versionName = "0.4-demo"
         buildConfigField("String", "SERVIDOR", "\"$servidor\"")
     }
 
