@@ -4,13 +4,12 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** Datos persistentes: servidor, tokens, rol y cola de movimientos sin enviar. */
+/** Datos persistentes: tokens, rol y cola de movimientos sin enviar. */
 class Sesion(context: Context) {
     private val prefs = context.getSharedPreferences("cleantok", Context.MODE_PRIVATE)
 
-    var servidor: String
-        get() = prefs.getString("servidor", BuildConfig.SERVIDOR)!!
-        set(v) = prefs.edit().putString("servidor", v.trimEnd('/')).apply()
+    /** Siempre el servidor de AWS con que se compiló la app (ya no se elige en el login). */
+    val servidor: String get() = BuildConfig.SERVIDOR.trimEnd('/')
 
     var accessToken: String?
         get() = prefs.getString("access", null)

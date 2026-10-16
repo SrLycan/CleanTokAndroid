@@ -1,6 +1,8 @@
 package ec.cleantok.app
 
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.IconButton
@@ -134,7 +136,10 @@ fun PantallaEmpresasPlataforma(api: Api, sesion: Sesion, alSalir: () -> Unit, ba
                                 IconoRedondo(Iconos.Limpieza, if (activa) Tono.INFO else Tono.NEUTRO)
                                 Column(Modifier.weight(1f)) {
                                     Text(e.getString("nombre"), style = MaterialTheme.typography.titleMedium)
-                                    Text("RUC ${e.getString("ruc")}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(
+                                        listOfNotNull("RUC ${e.getString("ruc")}", e.texto("telefono"), e.texto("email")).joinToString(" · "),
+                                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
                                 }
                                 Switch(checked = activa, onCheckedChange = { si ->
                                     correr({ api.patch("/plataforma/empresas/${e.getString("id")}", JSONObject().put("activo", si)) }) {
@@ -160,9 +165,28 @@ fun PantallaEmpresasPlataforma(api: Api, sesion: Sesion, alSalir: () -> Unit, ba
                                     }) { Text("Restablecer") }
                                 }
                             }
-                            Row {
+                            val supervisores = e.optJSONArray("supervisores")?.objetos().orEmpty()
+                            if (supervisores.isNotEmpty()) {
+                                Text("Supervisores de establecimiento", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                supervisores.forEach { s ->
+                                    val sedes = s.optJSONArray("establecimientos")?.objetos().orEmpty()
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Column(Modifier.weight(1f)) {
+                                            Text(s.getString("nombre"), style = MaterialTheme.typography.bodyMedium)
+                                            Text(
+                                                if (sedes.isEmpty()) "Sin sede asignada" else sedes.joinToString(" · ") { it.getString("nombre") },
+                                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                        TextButton(onClick = {
+                                            correr({ api.post("/plataforma/usuarios/${s.getString("id")}/restablecer-clave") }) { credencial = it }
+                                        }) { Text("Restablecer") }
+                                    }
+                                }
+                            }
+                            Row(Modifier.horizontalScroll(rememberScrollState())) {
                                 TextButton(onClick = { nuevoAdminDe = e }) { Text("Agregar administrador") }
-                                TextButton(onClick = { sitiosDe = e }) { Text("Establecimientos") }
+                                TextButton(onClick = { sitiosDe = e }) { Text("Sedes y supervisores") }
                             }
                         }
                     }
@@ -172,10 +196,10 @@ fun PantallaEmpresasPlataforma(api: Api, sesion: Sesion, alSalir: () -> Unit, ba
                     Text("Nueva empresa", Modifier.padding(start = 6.dp))
                 }
             }
-            if (nueva) DialogoNuevaEmpresa(alCerrar = { nueva = false }) { nombre, ruc, adminNombre, adminEmail ->
+            if (nueva) DialogoNuevaEmpresa(alCerrar = { nueva = false }) { empresa, adminNombre, adminEmail ->
                 nueva = false
                 correr({
-                    val emp = api.post("/empresas", JSONObject().put("nombre", nombre).put("ruc", ruc))
+                    val emp = api.post("/empresas", empresa)
                     api.post("/empresas/${emp.getString("id")}/admins", JSONObject().put("nombre", adminNombre).put("email", adminEmail))
                 }) { credencial = it; recargar() }
             }
@@ -194,31 +218,45 @@ fun PantallaEmpresasPlataforma(api: Api, sesion: Sesion, alSalir: () -> Unit, ba
 }
 
 @Composable
-private fun DialogoNuevaEmpresa(alCerrar: () -> Unit, alCrear: (String, String, String, String) -> Unit) {
+private fun DialogoNuevaEmpresa(alCerrar: () -> Unit, alCrear: (empresa: JSONObject, adminNombre: String, adminEmail: String) -> Unit) {
     var nombre by remember { mutableStateOf("") }
     var ruc by remember { mutableStateOf("") }
+    var telefono by remember { mutableStateOf("") }
+    var correo by remember { mutableStateOf("") }
+    var direccion by remember { mutableStateOf("") }
     var adminNombre by remember { mutableStateOf("") }
     var adminEmail by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = alCerrar,
         title = { Text("Nueva empresa de limpieza") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(nombre, { nombre = it }, label = { Text("Razón social") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(ruc, { ruc = it.filter(Char::isDigit).take(13) }, label = { Text("RUC (13 dígitos)") }, singleLine = true,
                     modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                Text("Contacto (lo ve el proveedor)", style = MaterialTheme.typography.titleSmall)
+                OutlinedTextField(telefono, { telefono = it }, label = { Text("Teléfono") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone))
+                OutlinedTextField(correo, { correo = it.trim() }, label = { Text("Correo de la empresa") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
+                OutlinedTextField(direccion, { direccion = it }, label = { Text("Dirección") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 Text("Primer administrador", style = MaterialTheme.typography.titleSmall)
                 OutlinedTextField(adminNombre, { adminNombre = it }, label = { Text("Nombre y apellido") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(adminEmail, { adminEmail = it.trim() }, label = { Text("Email") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
-                Text("Después, la empresa crea a sus encargados y elige sus proveedores.", style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Después, la empresa ubica su dirección en el mapa (Gestión → Empresa), crea a sus encargados y elige sus proveedores.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         },
         confirmButton = {
             Button(
-                onClick = { alCrear(nombre.trim(), ruc, adminNombre.trim(), adminEmail) },
-                enabled = nombre.isNotBlank() && ruc.length == 13 && adminNombre.isNotBlank() && "@" in adminEmail,
+                onClick = {
+                    val empresa = JSONObject().put("nombre", nombre.trim()).put("ruc", ruc)
+                        .put("telefono", telefono.ifBlank { JSONObject.NULL }).put("email", correo.ifBlank { JSONObject.NULL })
+                        .put("direccion", direccion.ifBlank { JSONObject.NULL })
+                    alCrear(empresa, adminNombre.trim(), adminEmail)
+                },
+                enabled = nombre.isNotBlank() && ruc.length == 13 && adminNombre.isNotBlank() && "@" in adminEmail && (correo.isBlank() || "@" in correo),
             ) { Text("Crear") }
         },
         dismissButton = { TextButton(onClick = alCerrar) { Text("Cancelar") } },
@@ -297,16 +335,20 @@ fun PantallaNuevoProveedor(api: Api, sesion: Sesion, nav: Navegacion) {
     }
 }
 
-/** Establecimientos de una empresa, para que el administrador de la plataforma los elimine. */
+/**
+ * Sedes de una empresa con su supervisor de establecimiento: el administrador de la plataforma crea sedes
+ * (asignando su supervisor), cambia el supervisor de cada una o la elimina.
+ */
 @Composable
 private fun DialogoEstablecimientosEmpresa(api: Api, empresa: JSONObject, alCerrar: () -> Unit, alEliminar: (String) -> Unit) {
+    val nav = LocalNav.current
     val ej = rememberEjecutor()
     var eliminar by remember { mutableStateOf<JSONObject?>(null) }
     var version by remember { mutableStateOf(0) }
     AlertDialog(
         onDismissRequest = alCerrar,
         icon = { Icon(Icons.Filled.Place, null) },
-        title = { Text("Establecimientos de ${empresa.getString("nombre")}") },
+        title = { Text("Sedes de ${empresa.getString("nombre")}") },
         text = {
             Column(Modifier.heightIn(max = 420.dp)) {
                 ej.aviso?.let { (t, tono) -> Aviso(t, tono, alCerrar = { ej.aviso = null }) }
@@ -317,8 +359,18 @@ private fun DialogoEstablecimientosEmpresa(api: Api, empresa: JSONObject, alCerr
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Column(Modifier.weight(1f)) {
                                     Text(s.getString("nombre"), style = MaterialTheme.typography.bodyMedium)
-                                    if (!s.getBoolean("activo")) Text("Inactivo", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(
+                                        listOfNotNull(
+                                            "Supervisor: " + (s.optJSONObject("supervisor")?.getString("nombre") ?: "sin asignar"),
+                                            if (!s.getBoolean("activo")) "Inactivo" else null,
+                                        ).joinToString(" · "),
+                                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
                                 }
+                                IconButton(onClick = {
+                                    alCerrar()
+                                    nav?.ir(Pantalla.SedeEmpresa(empresa.getString("id"), empresa.getString("nombre"), s.getString("id")))
+                                }) { Icon(Icons.Filled.Person, "Cambiar supervisor", tint = MaterialTheme.colorScheme.primary) }
                                 IconButton(onClick = { eliminar = s }, enabled = !ej.trabajando) {
                                     Icon(Icons.Filled.Delete, "Eliminar", tint = MaterialTheme.colorScheme.error)
                                 }
@@ -329,6 +381,12 @@ private fun DialogoEstablecimientosEmpresa(api: Api, empresa: JSONObject, alCerr
             }
         },
         confirmButton = { TextButton(onClick = alCerrar) { Text("Cerrar") } },
+        dismissButton = {
+            TextButton(onClick = {
+                alCerrar()
+                nav?.ir(Pantalla.SedeEmpresa(empresa.getString("id"), empresa.getString("nombre")))
+            }) { Text("Nueva sede") }
+        },
     )
     eliminar?.let { s ->
         DialogoEliminarEstablecimiento(s, alCerrar = { eliminar = null }) {

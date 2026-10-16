@@ -106,6 +106,8 @@ private class DatosBodega(val sitio: JSONObject, val ubicaciones: List<JSONObjec
 @Composable
 fun PantallaBodega(api: Api, sesion: Sesion, nav: Navegacion, p: Pantalla.Bodega) {
     val esAdmin = sesion.rol == "ADMIN_EMPRESA"
+    // El supervisor de establecimiento también cuenta la bodega de su sede (no carga órdenes ni crea materiales).
+    val gestiona = esAdmin || sesion.rol == "SUPERVISOR"
     val contexto = LocalContext.current
     val ej = rememberEjecutor()
     var nuevo by remember { mutableStateOf(false) }
@@ -171,9 +173,9 @@ fun PantallaBodega(api: Api, sesion: Sesion, nav: Navegacion, p: Pantalla.Bodega
                         }
                     }
                 }
-                // Conteo del total en bodega: solo administración. Los pisos se cuentan desde "Pisos".
+                // Conteo del total en bodega: administración y supervisor. Los pisos se cuentan desde "Pisos".
                 val bodega = d.ubicaciones.firstOrNull { it.getString("tipo") == "BODEGA" }
-                if (esAdmin && bodega != null) item(key = "contar") {
+                if (gestiona && bodega != null) item(key = "contar") {
                     Tarjeta(Modifier.entrada(3)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             IconoRedondo(Iconos.Conteo, Tono.OK)

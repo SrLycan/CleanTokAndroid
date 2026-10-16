@@ -72,6 +72,7 @@ fun PantallaPedidos(api: Api, nav: Navegacion, rol: String, alSalir: () -> Unit,
         "PROVEEDOR" -> "Órdenes de tus clientes"
         "REPARTIDOR" -> "Pedidos asignados a ti"
         "ENCARGADO" -> "Lo que llega a tus establecimientos"
+        "SUPERVISOR" -> "Lo que llega a tu sede"
         else -> "Órdenes de compra y entregas"
     }
     Marco("Pedidos", subtitulo = subtitulo, acciones = { BotonSalir(api, alSalir) }, barraInferior = barra) {
@@ -203,11 +204,22 @@ fun PantallaOrden(api: Api, nav: Navegacion, p: Pantalla.Orden) {
                     }
                 }
 
+                if (o.getString("estado") in setOf("APROBADA", "ACEPTADA")) item(key = "pagado") {
+                    Box(Modifier.animateItem()) {
+                        Aviso("La empresa aprobó y pagó esta orden: no hace falta aceptarla.", Tono.OK, titulo = "Orden pagada")
+                    }
+                }
+
                 item(key = "seguimiento") {
                     Tarjeta(Modifier.animateItem().entrada(2)) {
                         Text("Seguimiento", style = MaterialTheme.typography.titleSmall)
                         LineaDeTiempo(o.getJSONArray("pasos").objetos())
                     }
+                }
+
+                o.optJSONObject("cotizacion")?.let { c -> item(key = "cotizacion") { TarjetaCotizacion(c, Modifier.animateItem().entrada(2)) } }
+                o.optJSONObject("empresaContacto")?.let { c ->
+                    item(key = "empresa") { FichaEmpresaCliente(c, "Empresa que compra", Modifier.animateItem().entrada(2)) }
                 }
 
                 item(key = "destinos-titulo") { Seccion("Destinos (${o.getJSONArray("entregas").length()})", Modifier.animateItem()) }
@@ -262,7 +274,8 @@ fun PantallaOrden(api: Api, nav: Navegacion, p: Pantalla.Orden) {
 
 private fun textoAccion(estado: String) = when (estado) {
     "ACEPTADA" -> "Aceptar pedido"
-    "EN_PREPARACION" -> "Empezar a preparar"
+    // La orden llega aprobada y pagada: el primer paso del proveedor es despacharla.
+    "EN_PREPARACION" -> "Empezar a despachar"
     "EMPACADA" -> "Marcar como empacado"
     "DESPACHADA" -> "Salió de bodega"
     "EN_TRANSITO" -> "Iniciar ruta (en tránsito)"
@@ -435,6 +448,48 @@ private fun TarjetaEntrega(
                 Text("Confirmar recepción", Modifier.padding(start = 6.dp))
             }
         }
+    }
+}
+
+/** La cotización que originó la orden: lo que pidió la empresa, lo que ofertó el proveedor y lo que quedó en esta orden. */
+@Composable
+private fun TarjetaCotizacion(c: JSONObject, modifier: Modifier) {
+    Tarjeta(modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Cotización", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+            Etiqueta("Solicitud ${c.nombreDe("solicitud")}", Tono.INFO)
+        }
+        Row {
+            Dato("Entrega hasta", diaIso(c.getString("fechaRequerida")), modifier = Modifier.weight(1f))
+            Dato("Plazo", "${c.getInt("plazoDias")}", if (c.getInt("plazoDias") == 1) "día" else "días", Modifier.weight(1f))
+        }
+        Text(
+            listOfNotNull(
+                modalidadLegible(c.getString("modalidad")),
+                "ofertada ${fechaCorta(c.getString("ofertaEnviadaEn"))}",
+                c.optJSONObject("ofertadaPor")?.optString("nombre")?.let { "por $it" },
+            ).joinToString(" · "),
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        c.getJSONArray("items").objetos().forEach { i ->
+            val unidad = i.getString("unidad")
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(i.getString("nombre"), style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "Pidieron ${num(i.get("cantidadSolicitada"))} · ofertó ${num(i.get("cantidadOfertada"))} $unidad a ${dinero(i.get("precioUnitario"))}/$unidad",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (!i.getBoolean("enEstaOrden")) Etiqueta("No adjudicado", Tono.NEUTRO)
+            }
+        }
+        Row {
+            Text("Total cotizado", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            Text(dinero(c.get("totalOfertado")), style = MaterialTheme.typography.titleSmall)
+        }
+        c.texto("notaSolicitud")?.let { Text("Nota de la empresa: $it", style = MaterialTheme.typography.bodySmall) }
+        c.texto("notaOferta")?.let { Text("Nota del proveedor: $it", style = MaterialTheme.typography.bodySmall) }
     }
 }
 

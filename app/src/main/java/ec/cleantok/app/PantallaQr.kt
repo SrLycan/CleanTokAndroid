@@ -102,7 +102,7 @@ fun PantallaQr(api: Api, sesion: Sesion, nav: Navegacion, token: String) {
                 item(key = "titulo") { Seccion("Productos (${productos.size})", Modifier.animateItem().entrada(2)) }
                 if (productos.isEmpty()) item { EstadoVacio(Iconos.Inventario, "Sin productos", "No hay productos registrados para esta ubicación.", Tono.NEUTRO) }
                 itemsIndexed(productos, key = { _, p -> p.getString("id") }) { i, p ->
-                    TarjetaProducto(p, esBodega, sesion.rol == "ADMIN_EMPRESA", Modifier.animateItem().entrada(3 + i),
+                    TarjetaProducto(p, esBodega, sesion.rol == "ADMIN_EMPRESA" || sesion.rol == "SUPERVISOR", Modifier.animateItem().entrada(3 + i),
                         alAccion = { accion = it },
                         alNivel = { nivelDe = p to ubicId },
                         alKardex = { nav.ir(Pantalla.Kardex(p.getString("id"), p.getString("nombre"))) },

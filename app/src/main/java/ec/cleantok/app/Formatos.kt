@@ -16,10 +16,10 @@ fun modalidadLegible(m: String): String = when (m) {
     else -> m.legible()
 }
 
-/** Nombre corto del estado del pedido, como en un rastreo de courier. */
+/** Nombre corto del estado del pedido, como en un rastreo de courier. La orden aprobada ya está pagada: no se "acepta". */
 fun estadoOrdenLegible(e: String): String = when (e) {
-    "APROBADA" -> "Por aceptar"
-    "ACEPTADA" -> "Aceptado"
+    "APROBADA" -> "Pagado · por despachar"
+    "ACEPTADA" -> "Pagado · por despachar"
     "RECHAZADA" -> "Rechazado"
     "EN_PREPARACION" -> "En preparación"
     "EMPACADA" -> "Empacado"
@@ -35,7 +35,7 @@ fun tonoOrden(e: String): Tono = when (e) {
     "ENTREGADA" -> Tono.OK
     "RECHAZADA" -> Tono.CRITICO
     "DESPACHADA", "EN_TRANSITO", "LISTA_PARA_RETIRO", "RETIRADA" -> Tono.INFO
-    "APROBADA" -> Tono.AVISO
+    "APROBADA", "ACEPTADA" -> Tono.AVISO
     else -> Tono.NEUTRO
 }
 
@@ -70,6 +70,7 @@ fun tonoSolicitud(e: String): Tono = when (e) {
 fun rolLegible(r: String): String = when (r) {
     "SUPER_ADMIN" -> "Administración del sistema"
     "ADMIN_EMPRESA" -> "Administración"
+    "SUPERVISOR" -> "Supervisor de establecimiento"
     "ENCARGADO" -> "Encargado"
     "PROVEEDOR" -> "Proveedor"
     "REPARTIDOR" -> "Repartidor"

@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -227,7 +228,7 @@ fun DialogoNuevaPersona(
         title = { Text(titulo) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (roles.size > 1) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (roles.size > 1) Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     roles.forEach { (k, t) -> FilterChip(selected = rol == k, onClick = { rol = k }, label = { Text(t) }) }
                 }
                 OutlinedTextField(nombre, { nombre = it }, label = { Text("Nombre y apellido") }, singleLine = true, modifier = Modifier.fillMaxWidth())

@@ -1,9 +1,14 @@
 package ec.cleantok.app
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContent
@@ -18,12 +23,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.IntOffset
+import androidx.core.content.ContextCompat
+import kotlinx.coroutines.delay
+import org.json.JSONObject
 
 /** Pantallas de la app (navegación con una pila simple, sin librerías). */
 sealed interface Pantalla {
@@ -49,24 +58,56 @@ sealed interface Pantalla {
     data class OrdenPdf(val id: String, val estId: String, val titulo: String) : Pantalla
     /** Conteo físico de una ubicación (piso o bodega). */
     data class Conteo(val estId: String, val ubicacionId: String, val nombre: String, val esBodega: Boolean) : Pantalla
+    /** Detalle de un producto en un establecimiento: pisos, lugar, encargados y botón para comprarlo. */
+    data class DetalleProducto(val estId: String, val estNombre: String, val productoId: String, val nombre: String) : Pantalla
+    /** Lo que abre cada indicador del panel: CRITICO, BAJO o ALERTAS. */
+    data class ListaPanel(val tipo: String) : Pantalla
+    /** La campana: notificaciones como "un proveedor te envió su cotización". */
+    data object Notificaciones : Pantalla
+    /** Administración del sistema: nueva sede de una empresa con su supervisor, o cambiar el supervisor de una. */
+    data class SedeEmpresa(val empresaId: String, val empresaNombre: String, val sede: String? = null) : Pantalla
 }
 
 class Navegacion(inicial: Pantalla) {
     val pila = mutableStateListOf(inicial)
     val actual: Pantalla get() = pila.last()
 
+    /** Pestañas visitadas antes de la actual: "atrás" en la raíz vuelve a la anterior en vez de cerrar la app. */
+    private val pestanasPrevias = mutableStateListOf<Int>()
+    private var pestanaActual by mutableIntStateOf(0)
+
     /** Pestaña elegida en la raíz; se conserva al volver de una pantalla de detalle. */
-    var pestana by mutableIntStateOf(0)
+    var pestana: Int
+        get() = pestanaActual
+        set(v) {
+            if (v == pestanaActual) return
+            pestanasPrevias.remove(v)
+            pestanasPrevias.add(pestanaActual)
+            pestanaActual = v
+        }
+
+    /** Hay a dónde volver: una pantalla abierta encima o una pestaña visitada antes. */
+    val puedeVolver: Boolean get() = pila.size > 1 || pestanasPrevias.isNotEmpty()
 
     fun ir(p: Pantalla) { pila.add(p) }
-    fun atras(): Boolean = if (pila.size > 1) { pila.removeAt(pila.lastIndex); true } else false
-    fun reiniciar(p: Pantalla) { pila.clear(); pila.add(p); pestana = 0 }
+    fun atras(): Boolean = when {
+        pila.size > 1 -> { pila.removeAt(pila.lastIndex); true }
+        pestanasPrevias.isNotEmpty() -> { pestanaActual = pestanasPrevias.removeAt(pestanasPrevias.lastIndex); true }
+        else -> false
+    }
+    fun reiniciar(p: Pantalla) { pila.clear(); pila.add(p); pestanasPrevias.clear(); pestanaActual = 0 }
+    /** Vuelve a la raíz (pestañas) sin cambiar la pestaña elegida. */
+    fun volverARaiz() { while (pila.size > 1) pila.removeAt(pila.lastIndex) }
+
+    /** Producto que se eligió "Comprar" desde el detalle: Compras lo deja como único seleccionado y abre la fecha. */
+    var comprarProducto by mutableStateOf<String?>(null)
 }
 
 class MainActivity : ComponentActivity() {
     private lateinit var sesion: Sesion
     private lateinit var api: Api
     private lateinit var nav: Navegacion
+    private lateinit var avisos: Avisos
 
     /** Token de un QR que llegó por deep link antes de iniciar sesión. */
     private var tokenPendiente by mutableStateOf<String?>(null)
@@ -76,13 +117,28 @@ class MainActivity : ComponentActivity() {
         sesion = Sesion(this)
         api = Api(sesion)
         nav = Navegacion(if (sesion.conSesion) Pantalla.Inicio else Pantalla.Login)
+        avisos = Avisos(api, applicationContext)
         manejarDeepLink(intent)
+        manejarAviso(intent)
         enableEdgeToEdge()
         setContent {
             CleanTokTema {
-                CompositionLocalProvider(LocalNav provides nav) {
+                // Con sesión: consulta las notificaciones cada 30 s y pide permiso para mostrarlas (Android 13+).
+                val conSesion = nav.pila.firstOrNull() == Pantalla.Inicio
+                CompositionLocalProvider(LocalNav provides nav, LocalAvisos provides avisos, LocalRol provides (if (conSesion) sesion.rol else null)) {
                     Surface(color = MaterialTheme.colorScheme.background) {
-                        BackHandler(enabled = nav.pila.size > 1) { nav.atras() }
+                        val permiso = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+                        LaunchedEffect(conSesion) {
+                            if (!conSesion) { avisos.limpiar(); return@LaunchedEffect }
+                            if (Build.VERSION.SDK_INT >= 33 && sesion.rol == "ADMIN_EMPRESA" &&
+                                ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                            ) permiso.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            while (true) {
+                                if (!sesion.debeCambiarClave) avisos.actualizar()
+                                delay(Avisos.INTERVALO_MS)
+                            }
+                        }
+                        BackHandler(enabled = nav.puedeVolver) { nav.atras() }
                         // Como en la web (Motion): desliza con resorte, hacia la izquierda al avanzar y a la derecha al volver.
                         AnimatedContent(
                             targetState = nav.pila.size to nav.actual,
@@ -123,12 +179,27 @@ class MainActivity : ComponentActivity() {
             is Pantalla.Bodega -> PantallaBodega(api, sesion, nav, p)
             is Pantalla.OrdenPdf -> PantallaOrdenPdf(api, nav, p)
             is Pantalla.Conteo -> PantallaConteo(api, p)
+            is Pantalla.DetalleProducto -> PantallaDetalleProducto(api, nav, p)
+            is Pantalla.ListaPanel -> PantallaListaPanel(api, nav, p)
+            Pantalla.Notificaciones -> PantallaNotificaciones(nav)
+            is Pantalla.SedeEmpresa -> PantallaSedeEmpresa(api, sesion, nav, p)
         }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         manejarDeepLink(intent)
+        manejarAviso(intent)
+    }
+
+    /** Se tocó una notificación del sistema: abre lo que avisa (la solicitud cotizada) y la marca leída. */
+    private fun manejarAviso(intent: Intent?) {
+        val texto = intent?.getStringExtra(Avisos.EXTRA_AVISO) ?: return
+        intent.removeExtra(Avisos.EXTRA_AVISO)
+        if (!sesion.conSesion) return
+        val n = runCatching { JSONObject(texto) }.getOrNull() ?: return
+        destinoDe(n)?.let { nav.ir(it) }
+        runCatching { Thread { runCatching { api.post("/notificaciones/${n.getString("id")}/leer") } }.start() }
     }
 
     /** http(s)://{servidor}/q/{token} → pantalla del QR. */

@@ -95,6 +95,16 @@ private fun ColumnScope.PorReponer(api: Api, nav: Navegacion) {
             if (id !in elegidos) elegidos[id] = s.isNull("yaPedido")
             if (id !in cantidades) cantidades[id] = num(s.get("cantidadRecomendada")).replace(',', '.')
         }
+        // Llegó desde "Comprar este producto": solo ese queda elegido y se abre la fecha directamente.
+        LaunchedEffect(lista, nav.comprarProducto) {
+            val foco = nav.comprarProducto ?: return@LaunchedEffect
+            nav.comprarProducto = null
+            val s = lista.firstOrNull { it.getJSONObject("producto").getString("id") == foco } ?: return@LaunchedEffect
+            lista.forEach { elegidos[it.getJSONObject("producto").getString("id")] = false }
+            elegidos[foco] = true
+            val c = cantidades[foco]?.toBigDecimalOrNull() ?: s.get("cantidadRecomendada").toString().toBigDecimal()
+            porFechar = JSONArray().put(JSONObject().put("productoId", foco).put("cantidad", c))
+        }
         val seleccion = lista.filter { elegidos[it.getJSONObject("producto").getString("id")] == true }
         Column(Modifier.weight(1f)) {
             LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = FinDeLista) {
@@ -402,6 +412,11 @@ fun PantallaSolicitud(api: Api, nav: Navegacion, p: Pantalla.Solicitud) {
     var aviso by remember { mutableStateOf<Pair<String, Tono>?>(null) }
     var pagando by remember { mutableStateOf(false) }
     val contexto = LocalContext.current
+    // Al revisar la solicitud, sus avisos de "te cotizaron" quedan leídos.
+    val avisos = LocalAvisos.current
+    LaunchedEffect(p.id, avisos?.recientes) {
+        avisos?.recientes?.filter { !it.getBoolean("leida") && it.texto("referenciaId") == p.id }?.forEach { avisos.leer(it) }
+    }
 
     Marco("Solicitud ${p.codigo}", subtitulo = "Comparar ofertas y aprobar") {
         Cargador(p, { api.obj("/solicitudes/${p.id}") }) { s, recargar ->

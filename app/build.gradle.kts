@@ -5,9 +5,9 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
-// Servidor que trae la app al instalarla (se puede cambiar en el login):
-//   ./gradlew assembleRelease -Pcleantok.servidor=https://1-2-3-4.sslip.io
-val servidor = (findProperty("cleantok.servidor") as String?) ?: "http://10.0.2.2:8080"
+// Servidor fijo de la app: el backend en AWS (IP estática 44.215.16.137). El login entra directo ahí.
+// Para probar contra otro backend al compilar:  ./gradlew assembleDebug -Pcleantok.servidor=http://10.0.2.2:8080
+val servidor = (findProperty("cleantok.servidor") as String?) ?: "https://44-215-16-137.sslip.io"
 
 // Firma del APK que se comparte con el equipo: keystore.properties (no se versiona). Sin él, se firma con la clave de debug.
 val firma = rootProject.file("keystore.properties").takeIf { it.exists() }?.let { f -> Properties().apply { f.inputStream().use(::load) } }
@@ -20,8 +20,8 @@ android {
         applicationId = "ec.cleantok.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.2-demo"
+        versionCode = 3
+        versionName = "0.3-demo"
         buildConfigField("String", "SERVIDOR", "\"$servidor\"")
     }
 

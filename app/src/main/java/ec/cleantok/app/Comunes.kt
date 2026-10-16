@@ -77,6 +77,9 @@ fun mensajeError(e: Throwable): String = when {
 /** La navegación, para que la barra superior sepa si muestra "atrás". */
 val LocalNav = staticCompositionLocalOf<Navegacion?> { null }
 
+/** Rol de la sesión (ADMIN_EMPRESA, SUPERVISOR…), para lo que la barra superior muestra según quién entra. */
+val LocalRol = staticCompositionLocalOf<String?> { null }
+
 /**
  * Carga datos con indicador y botón de reintento; `recargar` vuelve a pedirlos.
  * Al recargar se mantiene lo que ya se veía (con una barra fina arriba), así las listas animan el cambio en vez de parpadear.
@@ -116,7 +119,11 @@ fun <T> Cargador(clave: Any, cargar: () -> T, contenido: @Composable (T, recarga
     }
 }
 
-/** Estructura de cada pantalla: barra superior (con "atrás" si hay a dónde volver) y contenido con márgenes. */
+/**
+ * Estructura de cada pantalla: barra superior y contenido con márgenes. La flecha "atrás" aparece siempre que haya
+ * a dónde volver (una pantalla anterior o, en la raíz, la pestaña visitada antes), así ninguna pantalla deja al
+ * usuario sin salida. La campana de notificaciones va antes de las demás acciones.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun Marco(
@@ -127,6 +134,8 @@ fun Marco(
     contenido: @Composable ColumnScope.() -> Unit,
 ) {
     val nav = LocalNav.current
+    val avisos = LocalAvisos.current
+    val rol = LocalRol.current
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = barraInferior,
@@ -142,11 +151,16 @@ fun Marco(
                     }
                 },
                 navigationIcon = {
-                    if (nav != null && nav.pila.size > 1) {
+                    if (nav != null && nav.puedeVolver) {
                         IconButton(onClick = { nav.atras() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Atrás") }
                     }
                 },
-                actions = acciones,
+                actions = {
+                    if (nav != null && avisos != null && avisos.visiblePara(rol) && nav.actual != Pantalla.Notificaciones) {
+                        Campana(avisos) { nav.ir(Pantalla.Notificaciones) }
+                    }
+                    acciones()
+                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             )
         },

@@ -1,5 +1,10 @@
 package ec.cleantok.app
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -18,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.Button
@@ -30,6 +36,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -41,7 +49,7 @@ import org.json.JSONObject
 import kotlin.math.roundToInt
 
 /** Todo lo que necesita el panel, cargado de una vez. */
-private class DatosPanel(
+internal class DatosPanel(
     val sitios: List<JSONObject>,
     /** Filas de inventario de todos los sitios, cada una con `sitio` = {id, nombre}. */
     val productos: List<JSONObject>,
@@ -51,7 +59,7 @@ private class DatosPanel(
     val porRecibir: List<JSONObject>,
 )
 
-private fun cargarPanel(api: Api): DatosPanel {
+internal fun cargarPanel(api: Api): DatosPanel {
     val sitios = api.arr("/establecimientos/mios").objetos()
     val productos = mutableListOf<JSONObject>()
     val alertas = mutableListOf<JSONObject>()
@@ -73,6 +81,8 @@ fun PantallaPanel(api: Api, nav: Navegacion, alSalir: () -> Unit, barra: @Compos
     Marco("Panel", subtitulo = "Resumen de tus establecimientos", acciones = { BotonSalir(api, alSalir) }, barraInferior = barra) {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(FinDeLista), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Saludo(api, Modifier.entrada(0))
+            CotizacionesRecibidas(nav)
+            AccesosRapidos(nav)
             Cargador("panel", { cargarPanel(api) }) { d, recargar ->
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Indicadores(d, nav, recargar)
@@ -87,6 +97,58 @@ fun PantallaPanel(api: Api, nav: Navegacion, alSalir: () -> Unit, barra: @Compos
     }
 }
 
+/**
+ * Alerta del panel: cotizaciones que enviaron los proveedores y aún no se revisan (las mismas de la campana).
+ * Al tocar una se abre la solicitud para comparar ofertas.
+ */
+@Composable
+private fun CotizacionesRecibidas(nav: Navegacion) {
+    val avisos = LocalAvisos.current ?: return
+    val scope = rememberCoroutineScope()
+    val nuevas = avisos.recientes.filter { !it.getBoolean("leida") && it.getString("tipo") == "OFERTA_RECIBIDA" }
+    AnimatedVisibility(nuevas.isNotEmpty(), enter = fadeIn(resorte()) + expandVertically(), exit = fadeOut() + shrinkVertically()) {
+        val c = Tono.AVISO.colores()
+        Surface(color = c.fondo, contentColor = c.contenido, shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Icon(Icons.Filled.Notifications, null)
+                    Text(
+                        if (nuevas.size == 1) "Te enviaron una cotización" else "Te enviaron ${nuevas.size} cotizaciones",
+                        style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f),
+                    )
+                }
+                nuevas.take(3).forEach { n ->
+                    Row(
+                        Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small).clickable {
+                            scope.launch { avisos.leer(n) }
+                            destinoDe(n)?.let { nav.ir(it) }
+                        }.padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(n.getString("titulo"), style = MaterialTheme.typography.bodyMedium)
+                            Text(n.getString("mensaje"), style = MaterialTheme.typography.bodySmall)
+                        }
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "Comparar ofertas")
+                    }
+                }
+                if (nuevas.size > 3) Text("Ver todas en la campana", style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.clickable { nav.ir(Pantalla.Notificaciones) })
+            }
+        }
+    }
+}
+
+/** Atajos a las otras pestañas del admin, arriba del todo. */
+@Composable
+private fun AccesosRapidos(nav: Navegacion) {
+    Row(Modifier.entrada(1), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Acceso(Icons.Filled.Place, "Sedes", Modifier.weight(1f)) { nav.pestana = PESTANA_SEDES }
+        Acceso(Icons.Filled.ShoppingCart, "Compras", Modifier.weight(1f)) { nav.pestana = PESTANA_COMPRAS }
+        Acceso(Iconos.Camion, "Pedidos", Modifier.weight(1f)) { nav.pestana = PESTANA_PEDIDOS }
+    }
+}
+
 @Composable
 private fun Indicadores(d: DatosPanel, nav: Navegacion, recargar: () -> Unit) {
     val criticos = d.productos.count { it.getString("estado") == "CRITICO" }
@@ -95,13 +157,16 @@ private fun Indicadores(d: DatosPanel, nav: Navegacion, recargar: () -> Unit) {
         IconButton(onClick = recargar) { Icon(Icons.Filled.Refresh, "Actualizar") }
     }
     Row(Modifier.entrada(1), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Indicador("Productos críticos", criticos, if (criticos > 0) Tono.CRITICO else Tono.OK, Iconos.Desabasto, Modifier.weight(1f))
-        Indicador("Con stock bajo", bajos, if (bajos > 0) Tono.AVISO else Tono.OK, Iconos.Inventario, Modifier.weight(1f))
+        Indicador("Productos críticos", criticos, if (criticos > 0) Tono.CRITICO else Tono.OK, Iconos.Desabasto, Modifier.weight(1f),
+            alTocar = { nav.ir(Pantalla.ListaPanel("CRITICO")) })
+        Indicador("Con stock bajo", bajos, if (bajos > 0) Tono.AVISO else Tono.OK, Iconos.Inventario, Modifier.weight(1f),
+            alTocar = { nav.ir(Pantalla.ListaPanel("BAJO")) })
     }
     Row(Modifier.entrada(2), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Indicador("Alertas abiertas", d.alertas.size, if (d.alertas.isEmpty()) Tono.OK else Tono.AVISO, Icons.Filled.Notifications, Modifier.weight(1f))
+        Indicador("Alertas abiertas", d.alertas.size, if (d.alertas.isEmpty()) Tono.OK else Tono.AVISO, Icons.Filled.Notifications, Modifier.weight(1f),
+            alTocar = { nav.ir(Pantalla.ListaPanel("ALERTAS")) })
         Indicador("Pedidos por recibir", d.porRecibir.size, Tono.INFO, Iconos.Camion, Modifier.weight(1f),
-            alTocar = { nav.pestana = PESTANA_PEDIDOS }.takeIf { d.porRecibir.isNotEmpty() })
+            alTocar = { nav.pestana = PESTANA_PEDIDOS })
     }
 }
 
@@ -151,7 +216,13 @@ private fun SugerenciasCompra(sugerencias: List<JSONObject>, nav: Navegacion) {
             if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             val prod = s.getJSONObject("producto")
             val critico = s.getString("estado") == "CRITICO"
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            val est = s.getJSONObject("establecimiento")
+            Row(
+                Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small).clickable {
+                    nav.ir(Pantalla.DetalleProducto(est.getString("id"), est.getString("nombre"), prod.getString("id"), prod.getString("nombre")))
+                }.padding(vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
                 Punto(if (critico) Tono.CRITICO else Tono.AVISO)
                 Column(Modifier.weight(1f)) {
                     Text(prod.getString("nombre"), style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -163,6 +234,7 @@ private fun SugerenciasCompra(sugerencias: List<JSONObject>, nav: Navegacion) {
                         color = MaterialTheme.colorScheme.primary)
                     s.texto("yaPedido")?.let { Etiqueta("En $it", Tono.INFO) }
                 }
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         if (orden.size > MAX_FILAS) {
@@ -375,6 +447,7 @@ private fun Punto(tono: Tono) {
 
 private const val MAX_FILAS = 5
 
-/** Índices de las pestañas del admin en la raíz (Panel · Compras · Pedidos · Gestión). */
-private const val PESTANA_COMPRAS = 1
-private const val PESTANA_PEDIDOS = 2
+/** Índices de las pestañas del admin en la raíz (Panel · Sedes · Compras · Pedidos · Gestión). */
+internal const val PESTANA_SEDES = 1
+internal const val PESTANA_COMPRAS = 2
+internal const val PESTANA_PEDIDOS = 3

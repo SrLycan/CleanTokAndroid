@@ -10,21 +10,25 @@ Una sola app con pantallas según el rol (la web queda para después):
 |---|---|---|
 | **Administración** (`admin@brillototal.ec`) | Inicio · Compras · Pedidos | Inventario, alertas, **hoja de QR** de cada establecimiento (compartir/imprimir, regenerar). **Compras**: qué reponer y cuánto, pedir cotización, **comparar ofertas** con puntaje y aprobar. Rastreo de cada pedido. |
 | **Encargado** (`maria@`, `luis@brillototal.ec`) | Inicio · Pedidos | Escanear el QR del piso o bodega: agregar, retirar, devolver, **nivel con foto** y kardex. **Confirmar la recepción** de lo que llega (completo o con novedad, foto de la guía): entra solo a la bodega. |
-| **Proveedor** (`ventas@lahigiene.ec`, `ventas@proclean.ec`) | Cotizar · Pedidos | Ver las solicitudes, **ofertar** por producto (precio, disponible, plazo, envío o retiro). Aceptar o rechazar órdenes, prepararlas, empacarlas, **asignar repartidor**. |
+| **Supervisor de establecimiento** (`supervisor@brillototal.ec`) | Mi sede · [Escanear QR] · Pedidos | Solo la sede que le asignaron (al crearla, la administración del sistema o la empresa): pisos, materiales, inventario, alertas, hoja de QR, conteos y movimientos de bodega, y confirmar lo que llega. No ve las demás sedes ni compras. |
+| **Proveedor** (`ventas@lahigiene.ec`, `ventas@proclean.ec`) | Cotizar · Pedidos | Ver las solicitudes con los datos de la empresa (razón social, RUC, teléfono, correo, dirección y mapa) y **ofertar** precio y disponible por producto; la fecha de entrega la fija la empresa. Las órdenes llegan **pagadas**: empezar a despachar, empacar, **asignar repartidor**. |
 | **Repartidor** (`reparto@lahigiene.ec`) | Mi ruta · Pedidos | **Ruta optimizada** sobre un mapa real de OpenStreetMap, por calles (base vs. optimizada: km, minutos, CO₂e), navegar en Google Maps, marcar "salió de bodega", "en tránsito" y cada destino entregado. |
 
 **Gestión de cuentas** (cada organización administra a su gente; las cuentas nuevas reciben una clave temporal que se comparte por WhatsApp o correo y se cambia al entrar):
 
 | Rol | Pestañas | Qué gestiona |
 |---|---|---|
-| **Administración del sistema** (`superadmin@cleantok.ec` / `SuperAdmin2026!`) | Resumen · Empresas · Proveedores | Cifras de la plataforma; alta de empresas con su primer admin y de proveedores (local y bodega en el mapa, formas de entrega) con su primer vendedor; activar o desactivar proveedores. |
-| **Administración de la empresa** | … · **Gestión** | **Equipo** (encargados y admins, sus sitios, restablecer clave, activar/desactivar), **Proveedores** (directorio: con quién trabajo y preferidos) y **Sitios** (crear establecimientos y pisos, ubicarlos en el mapa). |
+| **Administración del sistema** (`superadmin@cleantok.ec` / `SuperAdmin2026!`) | Resumen · Empresas · Proveedores | Cifras de la plataforma; alta de empresas con su primer admin y de proveedores (local y bodega en el mapa, formas de entrega) con su primer vendedor; activar o desactivar proveedores. **Sedes y supervisores**: crear la sede de una empresa asignándole su supervisor de establecimiento (existente o cuenta nueva) y cambiarlo. |
+| **Administración de la empresa** | … · **Gestión** | **Equipo** (encargados y admins, sus sitios, restablecer clave, activar/desactivar), **Proveedores** (directorio: con quién trabajo y preferidos) **Sitios** (crear establecimientos y pisos, ubicarlos en el mapa, elegir su supervisor) y **Empresa** (teléfono, correo, dirección y mapa que ve el proveedor). |
 | **Proveedor** | … · **Gestión** | **Equipo** (repartidores y vendedores) y **Perfil** (teléfono, local, bodega y formas de entrega). |
 
-Cada pedido tiene un **rastreo tipo courier**: aprobado → aceptado → en preparación → empacado → salió de bodega →
+Cada pedido tiene un **rastreo tipo courier**: aprobado y pagado → en preparación → empacado → salió de bodega →
 en tránsito → entregado, con fecha, hora y responsable de cada paso.
 
 Además:
+- **Notificaciones**: cuando un proveedor envía (o actualiza) su cotización, la administración lo ve en la campana, en un aviso del Panel y como notificación del sistema (la app consulta cada 30 s mientras está abierta; no hay push con la app cerrada).
+- **Atrás**: toda pantalla muestra la flecha cuando hay a dónde volver; en las pestañas, atrás regresa a la pestaña anterior.
+- **Orden de compra**: muestra la cotización que la originó (fecha requerida, plazo, precios ofertados, notas) y, al proveedor, los datos de la empresa compradora.
 - **Sin conexión**: si no hay red al registrar un movimiento, queda en el teléfono; **Sincronizar** lo envía a `POST /sincronizacion/lote` (el mismo `clientUuid`, así que no se duplica).
 - **Deep link** `http(s)://…/q/{token}`: el QR impreso puede abrir la app.
 - Muestra los errores del backend (`STOCK_INSUFICIENTE` con lo disponible, `UNIDAD_INCOMPATIBLE`, etc.).
@@ -35,10 +39,10 @@ agota cada producto; al aprobar se abre un **pago demo** (tarjeta o transferenci
 
 ## Compartir el APK (servidor en AWS)
 
-Con el backend desplegado (ver `../CLEANTOK/DESPLIEGUE-AWS.md`):
+Desde la 0.3 la app entra directo al backend en AWS (`https://44-215-16-137.sslip.io`): el login ya no pide servidor.
 
 ```powershell
-.\generar-apk.ps1 -Servidor https://3-85-10-20.sslip.io
+.\generar-apk.ps1 -Servidor https://44-215-16-137.sslip.io
 ```
 
 Deja `dist\CleanTok-<versión>.apk` con ese servidor por defecto, firmado con `cleantok-equipo.jks` (respáldalo).
@@ -53,7 +57,7 @@ Deja `dist\CleanTok-<versión>.apk` con ese servidor por defecto, firmado con `c
    ./gradlew assembleDebug
    adb install -r app/build/outputs/apk/debug/app-debug.apk
    ```
-3. En el login, servidor `http://10.0.2.2:8080` (emulador) o `http://IP-de-tu-PC:8080` (celular).
+3. Para probar contra un backend local, compila con `-Pcleantok.servidor=http://10.0.2.2:8080` (emulador) o `http://IP-de-tu-PC:8080` (celular): el login ya no permite cambiarlo.
 
 ### Abrir un piso sin cámara (emulador)
 

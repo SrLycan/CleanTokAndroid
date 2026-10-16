@@ -2,6 +2,7 @@ package ec.cleantok.app
 
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,6 +32,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -74,20 +76,64 @@ fun rememberEjecutor(): Ejecutor {
 
 // ======================= Empresa =======================
 
-/** Pestaña "Gestión" del admin de la empresa: su personal, sus proveedores y sus establecimientos. */
+/** Pestaña "Gestión" del admin de la empresa: su personal, sus proveedores, sus establecimientos y sus datos de contacto. */
 @Composable
 fun PantallaGestionEmpresa(api: Api, sesion: Sesion, nav: Navegacion, alSalir: () -> Unit, barra: @Composable () -> Unit) {
     var vista by remember { mutableStateOf("equipo") }
-    Marco("Gestión", subtitulo = "Personal, proveedores y establecimientos", acciones = { BotonSalir(api, alSalir) }, barraInferior = barra) {
+    Marco("Gestión", subtitulo = "Personal, proveedores, establecimientos y empresa", acciones = { BotonSalir(api, alSalir) }, barraInferior = barra) {
         Row(Modifier.entrada(0).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("equipo" to "Personal", "proveedores" to "Proveedores", "sitios" to "Establecimientos").forEach { (k, t) ->
+            listOf("equipo" to "Personal", "proveedores" to "Proveedores", "sitios" to "Establecimientos", "empresa" to "Empresa").forEach { (k, t) ->
                 FilterChip(selected = vista == k, onClick = { vista = k }, label = { Text(t) })
             }
         }
         when (vista) {
             "equipo" -> EquipoEmpresa(api, sesion)
             "proveedores" -> DirectorioProveedores(api)
+            "empresa" -> PerfilEmpresa(api)
             else -> SitiosEmpresa(api, nav)
+        }
+    }
+}
+
+/** Razón social y RUC (los fija la plataforma) y el contacto que ven los proveedores: teléfono, correo, dirección y mapa. */
+@Composable
+private fun ColumnScope.PerfilEmpresa(api: Api) {
+    val ej = rememberEjecutor()
+    Cargador("perfil-empresa", { api.obj("/empresa") }) { e, recargar ->
+        var telefono by remember(e) { mutableStateOf(e.texto("telefono") ?: "") }
+        var email by remember(e) { mutableStateOf(e.texto("email") ?: "") }
+        var direccion by remember(e) { mutableStateOf(e.texto("direccion") ?: "") }
+        var lat by remember(e) { mutableStateOf(e.texto("lat")?.toDouble()) }
+        var lng by remember(e) { mutableStateOf(e.texto("lng")?.toDouble()) }
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            ej.aviso?.let { (t, tono) -> Aviso(t, tono, alCerrar = { ej.aviso = null }) }
+            Aviso("Estos datos los ve el proveedor cuando cotiza y cuando atiende tus órdenes.", Tono.INFO)
+            Tarjeta {
+                Text(e.getString("nombre"), style = MaterialTheme.typography.titleLarge)
+                Text("RUC ${e.getString("ruc")}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                OutlinedTextField(telefono, { telefono = it }, label = { Text("Teléfono") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone))
+                OutlinedTextField(email, { email = it.trim() }, label = { Text("Correo") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
+                OutlinedTextField(direccion, { direccion = it }, label = { Text("Dirección") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            }
+            Tarjeta {
+                Text("Ubicación de la empresa", style = MaterialTheme.typography.titleSmall)
+                SelectorUbicacion(lat, lng, Modifier.fillMaxWidth().height(240.dp).clip(MaterialTheme.shapes.medium)) { a, b -> lat = a; lng = b }
+                Text(if (lat != null) "Ubicada en el mapa" else "Toca el mapa para ubicar la empresa", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        Button(
+            onClick = {
+                val cuerpo = JSONObject().put("telefono", telefono.ifBlank { JSONObject.NULL }).put("email", email.ifBlank { JSONObject.NULL })
+                    .put("direccion", direccion.ifBlank { JSONObject.NULL }).put("lat", lat ?: JSONObject.NULL).put("lng", lng ?: JSONObject.NULL)
+                ej.correr("Datos de la empresa guardados", { api.put("/empresa", cuerpo) }) { recargar() }
+            },
+            enabled = !ej.trabajando && (email.isBlank() || "@" in email),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).height(52.dp),
+        ) {
+            if (ej.trabajando) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+            else Text("Guardar datos de la empresa")
         }
     }
 }
@@ -107,17 +153,21 @@ private fun ColumnScope.EquipoEmpresa(api: Api, sesion: Sesion) {
                 ej.aviso?.let { (t, tono) -> item(key = "aviso") { Box(Modifier.animateItem()) { Aviso(t, tono, alCerrar = { ej.aviso = null }) } } }
                 item(key = "resumen") {
                     val encargados = personas.count { it.getString("rol") == "ENCARGADO" && it.getBoolean("activo") }
-                    Seccion("${personas.size} personas · $encargados encargados activos")
+                    val supervisores = personas.count { it.getString("rol") == "SUPERVISOR" && it.getBoolean("activo") }
+                    Seccion("${personas.size} personas · $encargados encargados · $supervisores supervisores")
                 }
                 itemsIndexed(personas, key = { _, u -> u.getString("id") }) { i, u ->
                     val id = u.getString("id")
-                    val esEncargado = u.getString("rol") == "ENCARGADO"
+                    val rol = u.getString("rol")
+                    // Encargados y supervisores de establecimiento trabajan solo en las sedes que tienen asignadas.
+                    val esEncargado = rol == "ENCARGADO" || rol == "SUPERVISOR"
                     val susSitios = u.optJSONArray("establecimientos")?.objetos().orEmpty()
                     TarjetaPersona(
                         u, Modifier.animateItem().entrada(1 + i),
                         detalle = when {
                             !esEncargado -> "Administra toda la empresa"
                             susSitios.isEmpty() -> "Sin establecimientos asignados"
+                            rol == "SUPERVISOR" -> "Supervisa: " + susSitios.joinToString(" · ") { it.getString("nombre") }
                             else -> susSitios.joinToString(" · ") { it.getString("nombre") }
                         },
                         trabajando = ej.trabajando,
@@ -139,14 +189,15 @@ private fun ColumnScope.EquipoEmpresa(api: Api, sesion: Sesion) {
         if (nueva) {
             val elegidos = remember { mutableStateListOf<String>() }
             DialogoNuevaPersona(
-                "Agregar personal", listOf("ENCARGADO" to "Encargado de limpieza", "ADMIN_EMPRESA" to "Administración"),
+                "Agregar personal",
+                listOf("ENCARGADO" to "Encargado de limpieza", "SUPERVISOR" to "Supervisor de establecimiento", "ADMIN_EMPRESA" to "Administración"),
                 alCerrar = { nueva = false },
-                extra = { rol -> if (rol == "ENCARGADO") SelectorSitios(sitios, elegidos) },
+                extra = { rol -> if (rol == "ENCARGADO" || rol == "SUPERVISOR") SelectorSitios(sitios, elegidos, supervisor = rol == "SUPERVISOR") },
                 alCrear = { nombre, email, rol ->
                     nueva = false
                     ej.correr(null, {
                         val u = api.post("/usuarios", JSONObject().put("nombre", nombre).put("email", email).put("rol", rol))
-                        if (rol == "ENCARGADO" && elegidos.isNotEmpty()) {
+                        if ((rol == "ENCARGADO" || rol == "SUPERVISOR") && elegidos.isNotEmpty()) {
                             api.put("/establecimientos/asignaciones/${u.getString("id")}", JSONArray(elegidos.toList()))
                         }
                         u
@@ -160,7 +211,7 @@ private fun ColumnScope.EquipoEmpresa(api: Api, sesion: Sesion) {
                 onDismissRequest = { asignar = null },
                 icon = { Icon(Icons.Filled.Place, null) },
                 title = { Text("Establecimientos de ${u.getString("nombre").substringBefore(' ')}") },
-                text = { Column(Modifier.verticalScroll(rememberScrollState())) { SelectorSitios(sitios, elegidos) } },
+                text = { Column(Modifier.verticalScroll(rememberScrollState())) { SelectorSitios(sitios, elegidos, supervisor = u.getString("rol") == "SUPERVISOR") } },
                 confirmButton = {
                     Button(onClick = {
                         asignar = null
@@ -175,9 +226,11 @@ private fun ColumnScope.EquipoEmpresa(api: Api, sesion: Sesion) {
 }
 
 @Composable
-private fun SelectorSitios(sitios: List<JSONObject>, elegidos: MutableList<String>) {
+private fun SelectorSitios(sitios: List<JSONObject>, elegidos: MutableList<String>, supervisor: Boolean = false) {
     Column {
-        Text("¿Dónde trabaja?", style = MaterialTheme.typography.titleSmall)
+        Text(if (supervisor) "¿Qué sede supervisa?" else "¿Dónde trabaja?", style = MaterialTheme.typography.titleSmall)
+        if (supervisor) Text("Solo verá y controlará esa sede. Si ya tenía otro supervisor, lo reemplaza.", style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
         sitios.forEach { s ->
             val id = s.getString("id")
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -256,6 +309,8 @@ private fun ColumnScope.SitiosEmpresa(api: Api, nav: Navegacion) {
                                 Text(e.getString("nombre"), style = MaterialTheme.typography.titleMedium)
                                 Text(listOfNotNull(e.getString("tipo").legible(), e.texto("direccion")).joinToString(" · "),
                                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("Supervisor: " + (e.optJSONObject("supervisor")?.getString("nombre") ?: "sin asignar"),
+                                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                             }
                             if (!e.getBoolean("activo")) Etiqueta("Inactivo", Tono.NEUTRO)
                             // Solo quien lo creó (o el administrador de la plataforma) lo puede eliminar.
@@ -301,15 +356,87 @@ fun DialogoEliminarEstablecimiento(e: JSONObject, alCerrar: () -> Unit, alConfir
 
 private val TIPOS_ESTABLECIMIENTO = listOf("OFICINA" to "Oficina", "HOSPITAL" to "Hospital", "FABRICA" to "Fábrica", "EDUCATIVO" to "Educativo", "OTRO" to "Otro")
 
-/** Crear o editar un establecimiento: datos, ubicación en el mapa y pisos (la bodega se crea sola). */
+/**
+ * Supervisor de establecimiento elegido para una sede: ninguno, uno existente o una cuenta nueva (nombre y email).
+ * [cuerpo] arma lo que espera la API (`supervisorId` o `nuevoSupervisor`).
+ */
+class EleccionSupervisor(actual: JSONObject?) {
+    var modo by mutableStateOf(if (actual != null) "existente" else "ninguno")
+    var id by mutableStateOf(actual?.optString("id"))
+    var nombre by mutableStateOf("")
+    var email by mutableStateOf("")
+    private val inicial = actual?.optString("id")
+
+    val valida: Boolean get() = modo != "nuevo" || (nombre.isNotBlank() && "@" in email)
+    val cambio: Boolean get() = when (modo) {
+        "ninguno" -> inicial != null
+        "existente" -> id != inicial
+        else -> true
+    }
+
+    fun cuerpo(base: JSONObject = JSONObject()): JSONObject = when (modo) {
+        "existente" -> base.put("supervisorId", id ?: JSONObject.NULL)
+        "nuevo" -> base.put("nuevoSupervisor", JSONObject().put("nombre", nombre.trim()).put("email", email.trim()))
+        else -> base
+    }
+}
+
+/** Elegir el supervisor de la sede: solo él (además de administración) verá y controlará esta sede. */
+@Composable
+fun SelectorSupervisor(supervisores: List<JSONObject>, eleccion: EleccionSupervisor, modifier: Modifier = Modifier) {
+    Tarjeta(modifier) {
+        Text("Supervisor de establecimiento", style = MaterialTheme.typography.titleSmall)
+        Text("Ve y controla solo esta sede: pisos, materiales, inventario, alertas y lo que llega.", style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected = eleccion.modo == "ninguno", onClick = { eleccion.modo = "ninguno" }, label = { Text("Sin supervisor") })
+            if (supervisores.isNotEmpty()) FilterChip(selected = eleccion.modo == "existente", onClick = {
+                eleccion.modo = "existente"
+                if (eleccion.id == null || supervisores.none { it.getString("id") == eleccion.id }) eleccion.id = supervisores.first().getString("id")
+            }, label = { Text("Uno existente") })
+            FilterChip(selected = eleccion.modo == "nuevo", onClick = { eleccion.modo = "nuevo" }, label = { Text("Crear cuenta nueva") })
+        }
+        when (eleccion.modo) {
+            "existente" -> supervisores.forEach { s ->
+                val sedes = s.optJSONArray("establecimientos")?.objetos().orEmpty()
+                Row(Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small).clickable { eleccion.id = s.getString("id") },
+                    verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(selected = eleccion.id == s.getString("id"), onClick = { eleccion.id = s.getString("id") })
+                    Column(Modifier.weight(1f)) {
+                        Text(s.getString("nombre"), style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            s.getString("email") + if (sedes.isEmpty()) " · sin sede" else " · " + sedes.joinToString(", ") { it.getString("nombre") },
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+            "nuevo" -> {
+                OutlinedTextField(eleccion.nombre, { eleccion.nombre = it }, label = { Text("Nombre y apellido") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(eleccion.email, { eleccion.email = it.trim() }, label = { Text("Email (será su usuario)") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
+                Text("Recibirá una clave temporal para compartirle.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            else -> {}
+        }
+    }
+}
+
+/** Crear o editar un establecimiento: datos, ubicación en el mapa, supervisor y pisos (la bodega se crea sola). */
 @Composable
 fun PantallaSitio(api: Api, nav: Navegacion, p: Pantalla.Sitio) {
     val ej = rememberEjecutor()
+    var credencial by remember { mutableStateOf<JSONObject?>(null) }
+    var salirAlCerrar by remember { mutableStateOf(false) }
     Marco(p.nombre, subtitulo = if (p.id == null) "Se crea con su bodega" else "Datos y ubicación") {
         Cargador(p, {
-            p.id?.let { api.obj("/establecimientos/$it") to api.arr("/establecimientos/$it/ubicaciones").objetos() }
-                ?: (JSONObject() to emptyList())
-        }) { (e, ubicaciones), recargar ->
+            Triple(
+                p.id?.let { api.obj("/establecimientos/$it") } ?: JSONObject(),
+                p.id?.let { api.arr("/establecimientos/$it/ubicaciones").objetos() } ?: emptyList(),
+                api.obj("/usuarios?size=200&sort=nombre").getJSONArray("content").objetos().filter { it.getString("rol") == "SUPERVISOR" && it.getBoolean("activo") },
+            )
+        }) { (e, ubicaciones, supervisores), recargar ->
+            val eleccion = remember(e) { EleccionSupervisor(e.optJSONObject("supervisor")) }
             var nombre by remember(e) { mutableStateOf(e.optString("nombre")) }
             var tipo by remember(e) { mutableStateOf(e.optString("tipo").ifBlank { "OFICINA" }) }
             var entidad by remember(e) { mutableStateOf(e.texto("entidadContratante") ?: "") }
@@ -336,7 +463,8 @@ fun PantallaSitio(api: Api, nav: Navegacion, p: Pantalla.Sitio) {
                     SelectorUbicacion(lat, lng, Modifier.fillMaxWidth().height(260.dp).clip(MaterialTheme.shapes.medium)) { a, b -> lat = a; lng = b }
                     Text(if (lat != null) "Lat ${lat} · Lng ${lng}" else "Sin ubicación", style = MaterialTheme.typography.bodySmall)
                 }
-                Tarjeta(Modifier.entrada(2)) {
+                SelectorSupervisor(supervisores, eleccion, Modifier.entrada(2))
+                Tarjeta(Modifier.entrada(3)) {
                     Text(if (p.id == null) "Pisos o áreas" else "Pisos y bodega", style = MaterialTheme.typography.titleSmall)
                     if (p.id == null) {
                         pisos.forEachIndexed { i, piso ->
@@ -367,20 +495,98 @@ fun PantallaSitio(api: Api, nav: Navegacion, p: Pantalla.Sitio) {
                         .put("lat", lat ?: JSONObject.NULL).put("lng", lng ?: JSONObject.NULL)
                     if (p.id == null) {
                         ej.correr(null, {
-                            val creado = api.post("/establecimientos", cuerpo)
+                            val creado = api.post("/establecimientos", eleccion.cuerpo(cuerpo))
                             pisos.forEach { api.post("/establecimientos/${creado.getString("id")}/ubicaciones", JSONObject().put("nombre", it).put("tipo", "PISO")) }
-                        }) { nav.atras() }
+                            creado
+                        }) { creado ->
+                            val c = creado.optJSONObject("credencialSupervisor")
+                            if (c != null) { credencial = c; salirAlCerrar = true } else nav.atras()
+                        }
                     } else {
-                        ej.correr("Cambios guardados", { api.put("/establecimientos/${p.id}", cuerpo) }) { recargar() }
+                        ej.correr("Cambios guardados", {
+                            api.put("/establecimientos/${p.id}", cuerpo)
+                            if (eleccion.cambio) api.put("/establecimientos/${p.id}/supervisor", eleccion.cuerpo()) else null
+                        }) { r -> r?.optJSONObject("credencialSupervisor")?.let { credencial = it }; recargar() }
                     }
                 },
-                enabled = nombre.isNotBlank() && !ej.trabajando,
+                enabled = nombre.isNotBlank() && eleccion.valida && !ej.trabajando,
                 modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).height(52.dp),
             ) {
                 if (ej.trabajando) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
                 else Text(if (p.id == null) "Crear establecimiento" else "Guardar cambios")
             }
         }
+        credencial?.let { DialogoCredencial(it, BuildConfig.SERVIDOR.trimEnd('/')) { credencial = null; if (salirAlCerrar) nav.atras() } }
+    }
+}
+
+/**
+ * Administración del sistema: crea una sede para una empresa y le asigna su supervisor de establecimiento
+ * (o, con [Pantalla.SedeEmpresa.sede], cambia el supervisor de una sede existente).
+ */
+@Composable
+fun PantallaSedeEmpresa(api: Api, sesion: Sesion, nav: Navegacion, p: Pantalla.SedeEmpresa) {
+    val ej = rememberEjecutor()
+    var credencial by remember { mutableStateOf<JSONObject?>(null) }
+    val base = "/plataforma/empresas/${p.empresaId}"
+    Marco(if (p.sede == null) "Nueva sede" else "Supervisor de la sede", subtitulo = p.empresaNombre) {
+        Cargador(p, {
+            val sede = p.sede?.let { id -> api.arr("$base/establecimientos").objetos().firstOrNull { it.getString("id") == id } }
+            sede to api.arr("$base/supervisores").objetos().filter { it.getBoolean("activo") }
+        }) { (sede, supervisores), recargar ->
+            val eleccion = remember(sede) { EleccionSupervisor(sede?.optJSONObject("supervisor")) }
+            var nombre by remember { mutableStateOf("") }
+            var tipo by remember { mutableStateOf("OFICINA") }
+            var direccion by remember { mutableStateOf("") }
+            var lat by remember { mutableStateOf<Double?>(null) }
+            var lng by remember { mutableStateOf<Double?>(null) }
+            Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                ej.aviso?.let { (t, tono) -> Aviso(t, tono, alCerrar = { ej.aviso = null }) }
+                if (sede == null) {
+                    Tarjeta(Modifier.entrada(0)) {
+                        OutlinedTextField(nombre, { nombre = it }, label = { Text("Nombre de la sede") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TIPOS_ESTABLECIMIENTO.forEach { (k, t) -> FilterChip(selected = tipo == k, onClick = { tipo = k }, label = { Text(t) }) }
+                        }
+                        OutlinedTextField(direccion, { direccion = it }, label = { Text("Dirección") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    }
+                    Tarjeta(Modifier.entrada(1)) {
+                        Text("Ubicación", style = MaterialTheme.typography.titleSmall)
+                        SelectorUbicacion(lat, lng, Modifier.fillMaxWidth().height(240.dp).clip(MaterialTheme.shapes.medium)) { a, b -> lat = a; lng = b }
+                        Text(if (lat != null) "Ubicada en el mapa" else "Toca el mapa donde está la sede", style = MaterialTheme.typography.bodySmall)
+                    }
+                } else {
+                    Tarjeta(Modifier.entrada(0)) {
+                        Text(sede.getString("nombre"), style = MaterialTheme.typography.titleMedium)
+                        Text("Supervisor actual: " + (sede.optJSONObject("supervisor")?.getString("nombre") ?: "sin asignar"),
+                            style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                SelectorSupervisor(supervisores, eleccion, Modifier.entrada(2))
+            }
+            Button(
+                onClick = {
+                    if (sede == null) {
+                        val cuerpo = JSONObject().put("nombre", nombre.trim()).put("tipo", tipo).put("direccion", direccion.ifBlank { JSONObject.NULL })
+                            .put("lat", lat ?: JSONObject.NULL).put("lng", lng ?: JSONObject.NULL)
+                        ej.correr(null, { api.post("$base/establecimientos", eleccion.cuerpo(cuerpo)) }) { creada ->
+                            creada.optJSONObject("credencialSupervisor")?.let { credencial = it } ?: nav.atras()
+                        }
+                    } else {
+                        ej.correr("Supervisor actualizado", { api.put("/establecimientos/${sede.getString("id")}/supervisor", eleccion.cuerpo()) }) { r ->
+                            r.optJSONObject("credencialSupervisor")?.let { credencial = it }
+                            recargar()
+                        }
+                    }
+                },
+                enabled = !ej.trabajando && eleccion.valida && (if (sede == null) nombre.isNotBlank() else eleccion.cambio),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).height(52.dp),
+            ) {
+                if (ej.trabajando) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                else Text(if (sede == null) "Crear sede" else "Guardar supervisor")
+            }
+        }
+        credencial?.let { DialogoCredencial(it, sesion.servidor) { credencial = null; if (p.sede == null) nav.atras() } }
     }
 }
 

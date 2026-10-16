@@ -59,6 +59,7 @@ private class Pestana(val clave: String, val titulo: String, val icono: ImageVec
  * Raíz de la app según el rol:
  * - Administración del sistema: Resumen · Empresas · Proveedores
  * - Administración de la empresa: Panel · Compras · Pedidos · Gestión
+ * - Supervisor de establecimiento: Mi sede · [Escanear QR] · Pedidos (solo la sede que tiene asignada)
  * - Encargado: Inicio · [Escanear QR] · Desabasto
  * - Proveedor: Cotizar · Pedidos · Gestión
  * - Repartidor: Mi ruta · Pedidos
@@ -104,6 +105,10 @@ fun PantallaRaiz(sesion: Sesion, api: Api, nav: Navegacion, alSalir: () -> Unit)
             pedidos,
             Pestana("gestion", "Gestión", Icons.Filled.Settings) { b -> PantallaGestionEmpresa(api, sesion, nav, alSalir, b) },
         )
+        "SUPERVISOR" -> listOf(
+            Pestana("sede", "Mi sede", Icons.Filled.Place) { b -> PantallaSupervisor(api, nav, alSalir, b) },
+            pedidos,
+        )
         "ENCARGADO" -> listOf(
             Pestana("inicio", "Inicio", Icons.Filled.Home) { b -> PantallaInicio(sesion, api, nav, alSalir, b) },
             Pestana("desabasto", "Desabasto", Iconos.Desabasto) { b -> PantallaDesabasto(api, sesion, alSalir, b) },
@@ -130,7 +135,7 @@ fun PantallaRaiz(sesion: Sesion, api: Api, nav: Navegacion, alSalir: () -> Unit)
 
     val i = nav.pestana.coerceIn(pestanas.indices)
     val barra: @Composable () -> Unit = {
-        if (r == "ENCARGADO") {
+        if (r == "ENCARGADO" || r == "SUPERVISOR") {
             BarraConEscaner(pestanas, i, insignias, alElegir = { nav.pestana = it }) {
                 escaner.launch(ScanOptions().setPrompt("Escanea el QR del piso o la bodega").setBeepEnabled(false).setOrientationLocked(false))
             }
@@ -217,6 +222,7 @@ private fun contarPendientes(api: Api, rol: String): Map<String, Int> {
             "pedidos" to ordenes.count { it.getString("estado") in setOf("APROBADA", "ACEPTADA", "EN_PREPARACION", "EMPACADA") },
             "cotizar" to api.arr("/proveedor/solicitudes").objetos().count { it.getBoolean("puedeOfertar") && it.isNull("miOferta") },
         )
+        "SUPERVISOR" -> mapOf("pedidos" to ordenes.count(::enCamino))
         "REPARTIDOR" -> mapOf("pedidos" to ordenes.count { it.getString("estado") in setOf("EMPACADA", "DESPACHADA", "EN_TRANSITO") })
         else -> emptyMap()
     }

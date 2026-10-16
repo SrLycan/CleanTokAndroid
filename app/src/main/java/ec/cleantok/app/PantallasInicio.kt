@@ -106,11 +106,9 @@ private val usuariosDemo = listOf(
 
 @Composable
 fun PantallaLogin(sesion: Sesion, api: Api, alEntrar: () -> Unit) {
-    var servidor by remember { mutableStateOf(sesion.servidor) }
     var email by remember { mutableStateOf(sesion.email) }
     var clave by remember { mutableStateOf("Demo2026!") }
     var verClave by remember { mutableStateOf(false) }
-    var verServidor by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var cargando by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -119,7 +117,6 @@ fun PantallaLogin(sesion: Sesion, api: Api, alEntrar: () -> Unit) {
         if (cargando) return
         cargando = true
         error = null
-        sesion.servidor = servidor
         scope.launch {
             enFondo { api.login(email.trim(), clave) }
                 .onSuccess { alEntrar() }
@@ -171,24 +168,6 @@ fun PantallaLogin(sesion: Sesion, api: Api, alEntrar: () -> Unit) {
                 Button(onClick = ::entrar, enabled = !cargando, modifier = Modifier.fillMaxWidth().height(52.dp)) {
                     if (cargando) CircularProgressIndicator(Modifier.size(22.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.5.dp)
                     else Text("Entrar", style = MaterialTheme.typography.titleSmall)
-                }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                Row(
-                    Modifier.fillMaxWidth().clickable { verServidor = !verServidor }.padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Icons.Filled.Settings, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("Servidor: $servidor", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(start = 8.dp))
-                    Text(if (verServidor) "Listo" else "Cambiar", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                }
-                AnimatedVisibility(verServidor) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        OutlinedTextField(servidor, { servidor = it }, label = { Text("URL del servidor") }, singleLine = true,
-                            modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
-                        Text("Por defecto: ${BuildConfig.SERVIDOR} · Emulador: http://10.0.2.2:8080 · Celular en la Wi-Fi: http://IP-de-la-PC:8080",
-                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
                 }
             }
 
@@ -315,6 +294,21 @@ fun Saludo(api: Api, modifier: Modifier = Modifier) {
     }
 }
 
+/**
+ * Pestaña "Mi sede" del supervisor de establecimiento: solo la sede (o sedes) que le asignaron, con sus pisos,
+ * materiales, inventario, alertas y la hoja de QR. Escanear está en el botón central.
+ */
+@Composable
+fun PantallaSupervisor(api: Api, nav: Navegacion, alSalir: () -> Unit, barra: @Composable () -> Unit) {
+    Marco("Mi sede", subtitulo = "Supervisor de establecimiento", acciones = { BotonSalir(api, alSalir) }, barraInferior = barra) {
+        Column(Modifier.verticalScroll(rememberScrollState()).padding(FinDeLista), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Saludo(api, Modifier.entrada(0))
+            Aviso("Ves y controlas solo la sede que te asignó la administración.", Tono.INFO)
+            ListaEstablecimientos(api, nav, esAdmin = true, primerIndice = 1)
+        }
+    }
+}
+
 /** Los establecimientos asignados (todos, para el admin), cada uno con su mapa y accesos. */
 /** Pestaña "Sedes" del admin: sus establecimientos con mapa, pisos, materiales, inventario y alertas. */
 @Composable
@@ -357,6 +351,9 @@ fun TarjetaEstablecimiento(e: JSONObject, esAdmin: Boolean, nav: Navegacion, mod
                 Text(nombre, style = MaterialTheme.typography.titleMedium)
                 Text(listOfNotNull(e.getString("tipo").legible(), direccion).joinToString(" · "), style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                e.optJSONObject("supervisor")?.let {
+                    Text("Supervisor: ${it.getString("nombre")}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                }
             }
             if (esAdmin) IconButton(onClick = { nav.ir(Pantalla.HojaQr(id, nombre)) }) {
                 Icon(Iconos.Qr, "Códigos QR", tint = MaterialTheme.colorScheme.primary)
@@ -370,7 +367,7 @@ fun TarjetaEstablecimiento(e: JSONObject, esAdmin: Boolean, nav: Navegacion, mod
                 MapaPunto(lat, lng, nombre, direccion, Modifier.fillMaxWidth().height(200.dp).clip(MaterialTheme.shapes.medium))
             } else {
                 Aviso(
-                    "Aún no tiene ubicación en el mapa." + if (esAdmin) " Agrégala en Gestión → Establecimientos." else " Pídesela a administración.",
+                    "Aún no tiene ubicación en el mapa." + if (LocalRol.current == "ADMIN_EMPRESA") " Agrégala en Gestión → Establecimientos." else " Pídesela a administración.",
                     Tono.AVISO,
                 )
             }
