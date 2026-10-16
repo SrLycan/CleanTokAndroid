@@ -95,12 +95,14 @@ import org.json.JSONObject
 /** Usuarios de la demo: email y quién es (un ejemplo de cada rol de la cadena). */
 private val usuariosDemo = listOf(
     "admin@brillototal.ec" to "Administración · Brillo Total",
+    "supervisor@brillototal.ec" to "Supervisora de establecimiento · solo Hospital San Andrés",
     "maria@brillototal.ec" to "Encargada · Brillo Total",
     "luis@brillototal.ec" to "Encargado · Brillo Total",
     "ventas@lahigiene.ec" to "Proveedor · Distribuidora La Higiene",
     "reparto@lahigiene.ec" to "Repartidor · Distribuidora La Higiene",
     "ventas@proclean.ec" to "Proveedor · ProClean Ecuador",
     "admin@andina.ec" to "Administración · Limpieza Andina",
+    "supervisor@andina.ec" to "Supervisor de establecimiento · solo Planta Textil",
     "superadmin@cleantok.ec" to "Administración del sistema · clave SuperAdmin2026!",
 )
 
