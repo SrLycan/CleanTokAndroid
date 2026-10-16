@@ -1,6 +1,7 @@
 package ec.cleantok.app
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -78,32 +79,61 @@ private fun ConSedes(sedes: List<JSONObject>, contenido: @Composable (List<JSONO
     }
 }
 
-/** Pestaña "Consumo atípico": pisos donde se consume fuera de lo normal, con sus estadísticas. */
+/**
+ * Pestaña "Consumo atípico": pisos donde se consume fuera de lo normal, con sus estadísticas.
+ * Los recuadros de arriba filtran la lista: todos los pisos, los consumos atípicos o solo los pisos afectados.
+ */
 @Composable
 fun PantallaConsumoAtipico(api: Api, nav: Navegacion, alSalir: () -> Unit, barra: @Composable () -> Unit) {
+    var filtro by remember { mutableStateOf("atipicos") }
     Marco("Consumo atípico", subtitulo = "Administrador de contrato · últimos 30 días", acciones = { BotonSalir(api, alSalir) }, barraInferior = barra) {
         Cargador("consumo-atipico", { cargarConsumo(api) }) { sedes, _ ->
             ConSedes(sedes) { elegidas ->
                 val todas = filas(elegidas)
                 val anomalas = todas.filter { it.p.getBoolean("anomalo") }
+                // Cada piso con su sede; "afectados" son los que tienen al menos un consumo atípico.
+                val pisos = elegidas.flatMap { s -> s.getJSONArray("pisos").objetos().map { s.nombreDe("establecimiento") to it } }
+                val afectados = pisos.filter { it.second.getInt("anomalos") > 0 }
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = FinDeLista) {
                     item(key = "resumen") {
                         Row(Modifier.entrada(0), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Cifra("Pisos", "${elegidas.sumOf { it.getJSONObject("resumen").getInt("pisos") }}", Tono.INFO, Modifier.weight(1f))
-                            Cifra("Atípicos", "${anomalas.size}", if (anomalas.isEmpty()) Tono.OK else Tono.CRITICO, Modifier.weight(1f))
-                            Cifra("Pisos afectados", "${anomalas.map { it.sede to it.piso }.toSet().size}", Tono.AVISO, Modifier.weight(1f))
+                            Cifra("Pisos", "${pisos.size}", Tono.INFO, Modifier.weight(1f), filtro == "pisos") { filtro = "pisos" }
+                            Cifra("Atípicos", "${anomalas.size}", if (anomalas.isEmpty()) Tono.OK else Tono.CRITICO, Modifier.weight(1f),
+                                filtro == "atipicos") { filtro = "atipicos" }
+                            Cifra("Pisos afectados", "${afectados.size}", Tono.AVISO, Modifier.weight(1f), filtro == "afectados") { filtro = "afectados" }
                         }
                     }
                     item(key = "explica") {
-                        Text("Atípico: un día con consumo mayor que el promedio + 2 desviaciones (y al menos 1,5 veces el promedio), " +
-                            "o una semana muy por encima o por debajo de lo habitual.",
-                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            when (filtro) {
+                                "pisos" -> "Todos los pisos (${pisos.size}) con sus insumos. Toca un recuadro para filtrar."
+                                "afectados" -> "Pisos con algún consumo atípico (${afectados.size}). Toca un recuadro para filtrar."
+                                else -> "Consumos atípicos (${anomalas.size}): un día por encima del promedio + 2 desviaciones (y al menos 1,5 veces " +
+                                    "el promedio), o una semana muy por encima o por debajo de lo habitual. Toca un recuadro para filtrar."
+                            },
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
-                    if (anomalas.isEmpty()) item(key = "vacio") {
-                        EstadoVacio(Iconos.Piso, "Sin consumos atípicos", "Todos los pisos consumen dentro de lo normal.")
-                    }
-                    itemsIndexed(anomalas, key = { _, f -> f.sede + f.piso + f.p.getJSONObject("producto").getString("id") }) { i, f ->
-                        TarjetaConsumo(f, Modifier.animateItem().entrada(1 + i)) { nav.ir(Pantalla.ConsumoProducto(f.sede, f.piso, f.p.toString())) }
+                    if (filtro == "atipicos") {
+                        if (anomalas.isEmpty()) item(key = "vacio") {
+                            EstadoVacio(Iconos.Piso, "Sin consumos atípicos", "Todos los pisos consumen dentro de lo normal.")
+                        }
+                        itemsIndexed(anomalas, key = { _, f -> "a" + f.sede + f.piso + f.p.getJSONObject("producto").getString("id") }) { i, f ->
+                            TarjetaConsumo(f, Modifier.animateItem().entrada(1 + i)) { nav.ir(Pantalla.ConsumoProducto(f.sede, f.piso, f.p.toString())) }
+                        }
+                    } else {
+                        val soloAfectados = filtro == "afectados"
+                        val lista = if (soloAfectados) afectados else pisos
+                        if (lista.isEmpty()) item(key = "vacio-pisos") {
+                            EstadoVacio(Iconos.Piso, if (soloAfectados) "Ningún piso afectado" else "Sin pisos",
+                                if (soloAfectados) "Todos los pisos consumen dentro de lo normal." else "Tus sedes aún no tienen pisos con consumo.")
+                        }
+                        itemsIndexed(lista, key = { _, x -> "p" + x.first + x.second.nombreDe("ubicacion") }) { i, x ->
+                            val (sede, piso) = x
+                            TarjetaPisoConsumo(sede, piso, soloAfectados, Modifier.animateItem().entrada(1 + i)) { p ->
+                                nav.ir(Pantalla.ConsumoProducto(sede, piso.nombreDe("ubicacion"), p.toString()))
+                            }
+                        }
                     }
                 }
             }
@@ -172,13 +202,62 @@ fun PantallaInsumosPisos(api: Api, nav: Navegacion, alSalir: () -> Unit, barra: 
     }
 }
 
+/** Recuadro con una cifra; tocarlo filtra la lista. El elegido lleva borde y check. */
 @Composable
-private fun Cifra(rotulo: String, valor: String, tono: Tono, modifier: Modifier) {
+private fun Cifra(rotulo: String, valor: String, tono: Tono, modifier: Modifier, elegida: Boolean, alTocar: () -> Unit) {
     val c = tono.colores()
-    androidx.compose.material3.Surface(color = c.fondo, contentColor = c.contenido, shape = MaterialTheme.shapes.medium, modifier = modifier) {
+    androidx.compose.material3.Surface(
+        onClick = alTocar,
+        color = c.fondo, contentColor = c.contenido, shape = MaterialTheme.shapes.medium, modifier = modifier,
+        border = if (elegida) androidx.compose.foundation.BorderStroke(2.dp, c.contenido) else null,
+    ) {
         Column(Modifier.padding(12.dp)) {
-            Text(valor, style = MaterialTheme.typography.headlineSmall)
-            Text(rotulo, style = MaterialTheme.typography.labelMedium)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(valor, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
+                if (elegida) androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Check, "Filtro activo", Modifier.height(18.dp))
+            }
+            Text(rotulo, style = MaterialTheme.typography.labelMedium, maxLines = 1)
+        }
+    }
+}
+
+/** Un piso con sus insumos (o solo los atípicos): cuántos atípicos y cuántos por reponer; cada fila abre el detalle. */
+@Composable
+private fun TarjetaPisoConsumo(sede: String, piso: JSONObject, soloAtipicos: Boolean, modifier: Modifier, alAbrir: (JSONObject) -> Unit) {
+    val anomalos = piso.getInt("anomalos")
+    val faltan = piso.getInt("insuficientes")
+    val productos = piso.getJSONArray("productos").objetos().filter { !soloAtipicos || it.getBoolean("anomalo") }
+    Tarjeta(modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            IconoRedondo(Iconos.Piso, if (anomalos > 0) Tono.CRITICO else if (faltan > 0) Tono.AVISO else Tono.OK)
+            Column(Modifier.weight(1f)) {
+                Text(piso.nombreDe("ubicacion"), style = MaterialTheme.typography.titleMedium)
+                Text(sede, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (anomalos > 0) Etiqueta("$anomalos atípico" + if (anomalos == 1) "" else "s", Tono.CRITICO)
+                if (faltan > 0) Etiqueta("$faltan por reponer", Tono.AVISO)
+                if (anomalos == 0 && faltan == 0) Etiqueta("Normal", Tono.OK)
+            }
+        }
+        if (productos.isEmpty()) Text("Sin insumos ni consumos registrados.", style = MaterialTheme.typography.bodySmall)
+        productos.forEachIndexed { j, p ->
+            if (j > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            val unidad = p.getJSONObject("producto").getString("unidad")
+            Row(
+                Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small).clickable { alAbrir(p) }.padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(p.nombreDe("producto"), style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        p.texto("motivo") ?: "Usa ${num(p.get("promedioDiario"))} $unidad/día · hay ${num(p.get("stockPiso"))} $unidad",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (p.getBoolean("anomalo")) Etiqueta("Atípico", Tono.CRITICO)
+                else Etiqueta(suficienciaLegible(p.getString("suficiencia")), tonoSuficiencia(p.getString("suficiencia")))
+            }
         }
     }
 }
