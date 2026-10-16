@@ -160,7 +160,7 @@ private fun ColumnScope.EquipoEmpresa(api: Api, sesion: Sesion) {
                     val id = u.getString("id")
                     val rol = u.getString("rol")
                     // Encargados y supervisores de establecimiento trabajan solo en las sedes que tienen asignadas.
-                    val esEncargado = rol == "ENCARGADO" || rol == "SUPERVISOR"
+                    val esEncargado = rol in ROLES_CON_SEDES
                     val susSitios = u.optJSONArray("establecimientos")?.objetos().orEmpty()
                     TarjetaPersona(
                         u, Modifier.animateItem().entrada(1 + i),
@@ -168,6 +168,7 @@ private fun ColumnScope.EquipoEmpresa(api: Api, sesion: Sesion) {
                             !esEncargado -> "Administra toda la empresa"
                             susSitios.isEmpty() -> "Sin establecimientos asignados"
                             rol == "SUPERVISOR" -> "Supervisa: " + susSitios.joinToString(" · ") { it.getString("nombre") }
+                            rol == "ADMIN_CONTRATO" -> "Monitorea el consumo de: " + susSitios.joinToString(" · ") { it.getString("nombre") }
                             else -> susSitios.joinToString(" · ") { it.getString("nombre") }
                         },
                         trabajando = ej.trabajando,
@@ -190,14 +191,17 @@ private fun ColumnScope.EquipoEmpresa(api: Api, sesion: Sesion) {
             val elegidos = remember { mutableStateListOf<String>() }
             DialogoNuevaPersona(
                 "Agregar personal",
-                listOf("ENCARGADO" to "Encargado de limpieza", "SUPERVISOR" to "Supervisor de establecimiento", "ADMIN_EMPRESA" to "Administración"),
+                listOf(
+                    "ENCARGADO" to "Encargado de limpieza", "SUPERVISOR" to "Supervisor de establecimiento",
+                    "ADMIN_CONTRATO" to "Administrador de contrato", "ADMIN_EMPRESA" to "Administración",
+                ),
                 alCerrar = { nueva = false },
-                extra = { rol -> if (rol == "ENCARGADO" || rol == "SUPERVISOR") SelectorSitios(sitios, elegidos, supervisor = rol == "SUPERVISOR") },
+                extra = { rol -> if (rol in ROLES_CON_SEDES) SelectorSitios(sitios, elegidos, supervisor = rol == "SUPERVISOR") },
                 alCrear = { nombre, email, rol ->
                     nueva = false
                     ej.correr(null, {
                         val u = api.post("/usuarios", JSONObject().put("nombre", nombre).put("email", email).put("rol", rol))
-                        if ((rol == "ENCARGADO" || rol == "SUPERVISOR") && elegidos.isNotEmpty()) {
+                        if (rol in ROLES_CON_SEDES && elegidos.isNotEmpty()) {
                             api.put("/establecimientos/asignaciones/${u.getString("id")}", JSONArray(elegidos.toList()))
                         }
                         u
@@ -224,6 +228,9 @@ private fun ColumnScope.EquipoEmpresa(api: Api, sesion: Sesion) {
         credencial?.let { DialogoCredencial(it, sesion.servidor) { credencial = null } }
     }
 }
+
+/** Roles que trabajan solo en las sedes que tienen asignadas. */
+private val ROLES_CON_SEDES = setOf("ENCARGADO", "SUPERVISOR", "ADMIN_CONTRATO")
 
 @Composable
 private fun SelectorSitios(sitios: List<JSONObject>, elegidos: MutableList<String>, supervisor: Boolean = false) {

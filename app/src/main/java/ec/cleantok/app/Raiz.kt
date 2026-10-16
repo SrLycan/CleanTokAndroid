@@ -60,6 +60,7 @@ private class Pestana(val clave: String, val titulo: String, val icono: ImageVec
  * - Administración del sistema: Resumen · Empresas · Proveedores
  * - Administración de la empresa: Panel · Compras · Pedidos · Gestión
  * - Supervisor de establecimiento: Mi sede · [Escanear QR] · Pedidos (solo la sede que tiene asignada)
+ * - Administrador de contrato: Consumo atípico · Insumos por piso (solo lectura de sus sedes)
  * - Encargado: Inicio · [Escanear QR] · Desabasto
  * - Proveedor: Cotizar · Pedidos · Gestión
  * - Repartidor: Mi ruta · Pedidos
@@ -108,6 +109,10 @@ fun PantallaRaiz(sesion: Sesion, api: Api, nav: Navegacion, alSalir: () -> Unit)
         "SUPERVISOR" -> listOf(
             Pestana("sede", "Mi sede", Icons.Filled.Place) { b -> PantallaSupervisor(api, nav, alSalir, b) },
             pedidos,
+        )
+        "ADMIN_CONTRATO" -> listOf(
+            Pestana("consumo", "Consumo atípico", Iconos.Panel) { b -> PantallaConsumoAtipico(api, nav, alSalir, b) },
+            Pestana("insumos", "Insumos por piso", Iconos.Piso) { b -> PantallaInsumosPisos(api, nav, alSalir, b) },
         )
         "ENCARGADO" -> listOf(
             Pestana("inicio", "Inicio", Icons.Filled.Home) { b -> PantallaInicio(sesion, api, nav, alSalir, b) },

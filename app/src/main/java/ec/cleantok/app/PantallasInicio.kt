@@ -96,6 +96,7 @@ import org.json.JSONObject
 private val usuariosDemo = listOf(
     "admin@brillototal.ec" to "Administración · Brillo Total",
     "supervisor@brillototal.ec" to "Supervisora de establecimiento · solo Hospital San Andrés",
+    "contrato@brillototal.ec" to "Administradora de contrato · consumo por piso",
     "maria@brillototal.ec" to "Encargada · Brillo Total",
     "luis@brillototal.ec" to "Encargado · Brillo Total",
     "ventas@lahigiene.ec" to "Proveedor · Distribuidora La Higiene",
@@ -103,7 +104,7 @@ private val usuariosDemo = listOf(
     "ventas@proclean.ec" to "Proveedor · ProClean Ecuador",
     "admin@andina.ec" to "Administración · Limpieza Andina",
     "supervisor@andina.ec" to "Supervisor de establecimiento · solo Planta Textil",
-    "superadmin@cleantok.ec" to "Administración del sistema · clave SuperAdmin2026!",
+    "superadmin.demo@cleantok.ec" to "Administración del sistema · clave SuperAdmin2026!",
 )
 
 @Composable

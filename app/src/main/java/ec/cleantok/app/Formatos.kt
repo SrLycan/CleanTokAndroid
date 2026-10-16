@@ -71,6 +71,7 @@ fun rolLegible(r: String): String = when (r) {
     "SUPER_ADMIN" -> "Administración del sistema"
     "ADMIN_EMPRESA" -> "Administración"
     "SUPERVISOR" -> "Supervisor de establecimiento"
+    "ADMIN_CONTRATO" -> "Administrador de contrato"
     "ENCARGADO" -> "Encargado"
     "PROVEEDOR" -> "Proveedor"
     "REPARTIDOR" -> "Repartidor"

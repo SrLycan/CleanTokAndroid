@@ -66,6 +66,8 @@ sealed interface Pantalla {
     data object Notificaciones : Pantalla
     /** Administración del sistema: nueva sede de una empresa con su supervisor, o cambiar el supervisor de una. */
     data class SedeEmpresa(val empresaId: String, val empresaNombre: String, val sede: String? = null) : Pantalla
+    /** Administrador de contrato: estadísticas de consumo de un insumo en un piso ([datos]: la fila de consumo-pisos). */
+    data class ConsumoProducto(val sede: String, val piso: String, val datos: String) : Pantalla
 }
 
 class Navegacion(inicial: Pantalla) {
@@ -183,6 +185,7 @@ class MainActivity : ComponentActivity() {
             is Pantalla.ListaPanel -> PantallaListaPanel(api, nav, p)
             Pantalla.Notificaciones -> PantallaNotificaciones(nav)
             is Pantalla.SedeEmpresa -> PantallaSedeEmpresa(api, sesion, nav, p)
+            is Pantalla.ConsumoProducto -> PantallaConsumoProducto(p)
         }
     }
 
